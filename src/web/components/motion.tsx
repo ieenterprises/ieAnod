@@ -86,7 +86,14 @@ export function NodGlyph({
           )}
         </>
       )}
-      <circle cx="16" cy="16" r="10" stroke="currentColor" strokeWidth="4" />
+      <image
+        href="/ieanod-logo.png"
+        x="1"
+        y="1"
+        width="30"
+        height="30"
+        preserveAspectRatio="xMidYMid meet"
+      />
       <g
         className="ob-glyph-orbit"
         data-phase={phase}
