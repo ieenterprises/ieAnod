@@ -22,3 +22,5 @@
 !deployment/self-host/
 !deployment/self-host/Dockerfile
 !deployment/self-host/healthcheck.mjs
+!deployment/render/
+!deployment/render/**

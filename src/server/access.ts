@@ -86,7 +86,9 @@ export function registerLocalAccess(
       .header('Cache-Control', 'no-store')
       .header('Content-Security-Policy', "frame-ancestors 'none'");
     const path = request.url.split('?')[0];
-    if (!hosts.has(request.headers.host || ''))
+    const relaxHost = process.env.NOD_RELAX_HOST_CHECK === 'true';
+    if (path === '/healthz') return reply.code(200).send({ ok: true });
+    if (!relaxHost && !hosts.has(request.headers.host || ''))
       return reply.code(403).send({ error: 'This host is not permitted.' });
     if (
       !desktop &&
@@ -95,7 +97,7 @@ export function registerLocalAccess(
     )
       return;
     if (!desktop && request.method === 'GET' && path === '/api/webhooks/whatsapp') return;
-    if (request.headers.origin) {
+    if (!relaxHost && request.headers.origin) {
       let requested: URL;
       try {
         requested = new URL(request.headers.origin);

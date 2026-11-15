@@ -13,6 +13,7 @@ services:
       NODE_ENV: production
       NOD_ENVIRONMENT: production
       NOD_HOST: 0.0.0.0
+      NOD_RELAX_HOST_CHECK: ${NOD_RELAX_HOST_CHECK:-true}
       PORT: ${PORT:-4310}
       NOD_DATA_ROOT: /var/lib/nod
       NOD_PUBLIC_URL: ${NOD_PUBLIC_URL:-http://localhost:${PORT:-4310}}
