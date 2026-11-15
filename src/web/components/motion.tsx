@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type HTMLAttributes } from 'react';
 import { cn } from '../lib/utils';
 
 export function prefersReducedMotion() {
@@ -29,6 +29,7 @@ export function NodGlyph({
   progress?: number;
   waiting?: boolean;
 }) {
+  const clipId = useId();
   const orbiting = progress !== undefined;
   const thinking = mode === 'thinking';
   const [phase, setPhase] = useState<'rest' | 'spin' | 'settle'>(thinking ? 'spin' : 'rest');
@@ -71,6 +72,11 @@ export function NodGlyph({
       fill="none"
       aria-hidden="true"
     >
+      <defs>
+        <clipPath id={clipId}>
+          <circle cx="16" cy="16" r="15" />
+        </clipPath>
+      </defs>
       {orbiting && (
         <>
           <circle className="ob-glyph-track" cx="16" cy="16" r={orbitRadius} />
@@ -86,13 +92,15 @@ export function NodGlyph({
           )}
         </>
       )}
+      <circle cx="16" cy="16" r="15" fill="#ffffff" />
       <image
         href="/ieanod-logo.png"
         x="1"
         y="1"
         width="30"
         height="30"
-        preserveAspectRatio="xMidYMid meet"
+        clipPath={`url(#${clipId})`}
+        preserveAspectRatio="xMidYMid slice"
       />
       <g
         className="ob-glyph-orbit"

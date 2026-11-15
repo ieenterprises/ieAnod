@@ -7,8 +7,9 @@ export function BrandMark({ small = false }: { small?: boolean }) {
         style={{
           width: '100%',
           height: '100%',
+          aspectRatio: '1 / 1',
           borderRadius: '50%',
-          objectFit: 'contain',
+          objectFit: 'cover',
           display: 'block',
         }}
       />

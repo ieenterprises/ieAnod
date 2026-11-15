@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/ieanod-logo.png" />
     <script src="/theme-init.js"></script>
     <title>Return to ieAnod</title>
     <style>
@@ -130,7 +130,7 @@
           alt=""
           width="28"
           height="28"
-          style="border-radius: 50%; object-fit: contain;"
+          style="border-radius: 50%; aspect-ratio: 1 / 1; object-fit: cover; display: block;"
         />
         <span>ieAnod</span>
       </div>
@@ -176,10 +176,10 @@
         if (!succeeded)
           message.textContent =
             connection === 'expired'
-              ? 'Check your connection in Nod.'
+              ? 'Check your connection in ieAnod.'
               : connection === 'cancelled'
-                ? 'You can start again in Nod.'
-                : 'Try again in Nod.';
+                ? 'You can start again in ieAnod.'
+                : 'Try again in ieAnod.';
         const desktop = query.get('desktop') === '1';
         const returnLink = document.getElementById('return');
         returnLink.href = desktop ? 'nod://open/apps' : '/apps';
@@ -197,7 +197,7 @@
             window.close();
           } catch {}
         });
-        document.title = `${title} · Nod`;
+        document.title = `${title} · ieAnod`;
         try {
           history.replaceState(null, '', location.pathname);
         } catch {}
