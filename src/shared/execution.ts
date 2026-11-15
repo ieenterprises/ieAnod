@@ -1,0 +1,38 @@
+export interface ExecutionScope {
+  threadId: string;
+  sessionId: string;
+  turnId: string;
+  runId: string;
+  parentRunId?: string;
+  browserId: string;
+}
+
+export interface WorkspaceCommandRecord {
+  command?: string;
+  exitCode?: number;
+  output?: string;
+}
+
+export interface ExecutionEvent {
+  execution: ExecutionScope;
+  callId?: string;
+  site?: string;
+  command?: WorkspaceCommandRecord;
+}
+
+export interface UsageDetails {
+  provider: string;
+  category: 'agent' | 'memory' | 'review' | 'tasks' | 'task_classification';
+  operation: string;
+  attempt?: number;
+  model?: string;
+  status: 'succeeded' | 'failed' | 'cancelled';
+  durationMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  costUsd?: number | null;
+  estimateUsd?: number | null;
+  pricing?: 'reported' | 'sdk_estimate' | 'unavailable';
+}
