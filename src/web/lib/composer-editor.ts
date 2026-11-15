@@ -59,7 +59,7 @@ export function createComposerExtensions(callbacks: {
     TableKit.configure({ table: { resizable: false } }),
     TaskList,
     TaskItem.configure({ nested: true }),
-    Placeholder.configure({ placeholder: callbacks.placeholder ?? 'Message Nod…' }),
+    Placeholder.configure({ placeholder: callbacks.placeholder ?? 'Message ieAnod…' }),
     Extension.create({
       name: 'chatInput',
       priority: 1000,

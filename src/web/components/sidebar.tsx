@@ -1,10 +1,12 @@
 import { type Ref, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { LayoutGrid, Moon, Settings, Sun } from './icons';
+import { LayoutGrid, Moon, Power, Settings, Sun } from './icons';
 import { BrandMark } from './brand';
 import { Tooltip } from './tooltip';
 import { desktopSettingsAvailable } from '../lib/desktop';
 import type { AccountControls } from './account-menu';
 import { currentTheme, setTheme, subscribeTheme } from '../lib/theme';
+import { apiResponse } from '../lib/api';
+import { sessionStore } from '../lib/session';
 import {
   isEditingTarget,
   navigationShortcut,
@@ -44,10 +46,14 @@ export function Sidebar({
   const chatLabel = [
     'Chat',
     unreadCount || unreadPending ? unreadLabel : null,
-    presence === 'waiting' ? 'waiting for you' : presence === 'working' ? 'Nod is working' : null,
+    presence === 'waiting' ? 'waiting for you' : presence === 'working' ? 'ieAnod is working' : null,
   ]
     .filter(Boolean)
     .join(', ');
+  const signOut = async () => {
+    await apiResponse('/api/auth/signout', { method: 'POST' }).catch(() => undefined);
+    sessionStore.invalidate('', true);
+  };
   const unreadBadge =
     unreadCount || unreadPending ? (
       <span className="chat-unread-badge" aria-hidden="true">
@@ -204,7 +210,7 @@ export function Sidebar({
         <a
           href="/"
           className="brand"
-          aria-label="Nod"
+          aria-label="ieAnod"
           onClick={(event) => {
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
             event.preventDefault();
@@ -212,7 +218,7 @@ export function Sidebar({
           }}
         >
           <BrandMark />
-          <span>Nod</span>
+          <span>ieAnod</span>
         </a>
       </div>
       <nav className="main-nav" aria-label="Main navigation" id="sidebar-navigation">
@@ -371,6 +377,16 @@ export function Sidebar({
                   <Settings size={20} aria-hidden="true" />
                   <span>Settings</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMobileMenu();
+                    void signOut();
+                  }}
+                >
+                  <Power size={20} aria-hidden="true" />
+                  <span>Sign out</span>
+                </button>
               </div>
             )}
           </div>
@@ -391,24 +407,37 @@ export function Sidebar({
           </Tooltip>
         )}
         {account && (
-          <Tooltip
-            content="Settings"
-            shortcut={desktop ? shortcutLabel(',', mac) : undefined}
-            side="right"
-            forceOpen={hints}
-          >
-            <button
-              type="button"
-              className={`nav-link ${path.startsWith('/settings') ? 'nav-link-active' : ''}`}
-              aria-label="Settings"
-              aria-current={path.startsWith('/settings') ? 'page' : undefined}
-              aria-keyshortcuts={desktop ? `${mac ? 'Meta' : 'Control'}+,` : undefined}
-              onClick={(event) => account.onSettings('General', event.currentTarget)}
+          <>
+            <Tooltip
+              content="Settings"
+              shortcut={desktop ? shortcutLabel(',', mac) : undefined}
+              side="right"
+              forceOpen={hints}
             >
-              <Settings size={20} solid={path.startsWith('/settings')} aria-hidden="true" />
-              <span className="nav-label">Settings</span>
-            </button>
-          </Tooltip>
+              <button
+                type="button"
+                className={`nav-link ${path.startsWith('/settings') ? 'nav-link-active' : ''}`}
+                aria-label="Settings"
+                aria-current={path.startsWith('/settings') ? 'page' : undefined}
+                aria-keyshortcuts={desktop ? `${mac ? 'Meta' : 'Control'}+,` : undefined}
+                onClick={(event) => account.onSettings('General', event.currentTarget)}
+              >
+                <Settings size={20} solid={path.startsWith('/settings')} aria-hidden="true" />
+                <span className="nav-label">Settings</span>
+              </button>
+            </Tooltip>
+            <Tooltip content="Sign out" side="right" forceOpen={hints}>
+              <button
+                type="button"
+                className="nav-link"
+                aria-label="Sign out"
+                onClick={() => void signOut()}
+              >
+                <Power size={20} aria-hidden="true" />
+                <span className="nav-label">Sign out</span>
+              </button>
+            </Tooltip>
+          </>
         )}
       </div>
     </aside>

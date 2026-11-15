@@ -1,7 +1,8 @@
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { chmod, link, lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { pool } from './db.ts';
 
 const token = /^[A-Za-z0-9_-]{43}$/;
 
@@ -133,7 +134,13 @@ export function registerLocalAccess(
       appCallback ||
       connectionBridge ||
       (!desktop &&
-        ((request.method === 'POST' && path === '/api/access') ||
+        ((request.method === 'POST' &&
+          [
+            '/api/access',
+            '/api/auth/signup',
+            '/api/auth/signin',
+            '/api/auth/signout',
+          ].includes(path)) ||
           (request.method === 'GET' && path === '/api/privacy')));
     if (
       !open &&
@@ -162,16 +169,99 @@ export function registerLocalAccess(
     )
       return reply.code(403).send({ error: 'Cross-site requests are not permitted.' });
   });
-  if (!desktop)
+  if (!desktop) {
+    const cookieHeader = (maxAge = 34560000) =>
+      `${cookie}=${maxAge > 0 ? access.key : ''}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${origin?.protocol === 'https:' ? '; Secure' : ''}`;
+
     app.post('/api/access', { bodyLimit: 4096 }, async (request, reply) => {
       if (!matches((request.body as { key?: unknown } | undefined)?.key))
         return reply.code(401).send({ error: 'This link is no longer valid.' });
-      return reply
-        .header(
-          'Set-Cookie',
-          `${cookie}=${access.key}; Path=/; HttpOnly; SameSite=Strict; Max-Age=34560000${origin?.protocol === 'https:' ? '; Secure' : ''}`,
-        )
-        .code(204)
-        .send();
+      return reply.header('Set-Cookie', cookieHeader()).code(204).send();
     });
+
+    app.post('/api/auth/signup', { bodyLimit: 8192 }, async (request, reply) => {
+      const body = (request.body ?? {}) as {
+        name?: unknown;
+        email?: unknown;
+        password?: unknown;
+      };
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      const password = typeof body.password === 'string' ? body.password : '';
+      if (!name || name.length > 120)
+        return reply.code(400).send({ error: 'Please enter your full name.' });
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)
+        return reply.code(400).send({ error: 'Please enter a valid email address.' });
+      if (password.length < 6 || password.length > 200)
+        return reply.code(400).send({ error: 'Password must be at least 6 characters.' });
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ieanod_users (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          name text NOT NULL,
+          email text UNIQUE NOT NULL,
+          password_hash text NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now()
+        );
+      `);
+      const existing = await pool.query('SELECT id FROM ieanod_users WHERE email = $1', [email]);
+      if (existing.rowCount && existing.rowCount > 0)
+        return reply
+          .code(409)
+          .send({ error: 'An account with this email already exists. Please sign in.' });
+
+      const salt = randomBytes(16).toString('hex');
+      const derived = scryptSync(password, salt, 64).toString('hex');
+      const passwordHash = `${salt}:${derived}`;
+      await pool.query(
+        'INSERT INTO ieanod_users (name, email, password_hash) VALUES ($1, $2, $3)',
+        [name, email, passwordHash],
+      );
+      return reply
+        .header('Set-Cookie', cookieHeader())
+        .code(200)
+        .send({ ok: true, user: { name, email } });
+    });
+
+    app.post('/api/auth/signin', { bodyLimit: 8192 }, async (request, reply) => {
+      const body = (request.body ?? {}) as { email?: unknown; password?: unknown };
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      const password = typeof body.password === 'string' ? body.password : '';
+      if (!email || !password)
+        return reply.code(400).send({ error: 'Please enter your email and password.' });
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ieanod_users (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          name text NOT NULL,
+          email text UNIQUE NOT NULL,
+          password_hash text NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now()
+        );
+      `);
+      const result = await pool.query<{ name: string; email: string; password_hash: string }>(
+        'SELECT name, email, password_hash FROM ieanod_users WHERE email = $1',
+        [email],
+      );
+      const row = result.rows[0];
+      if (!row)
+        return reply.code(401).send({ error: 'Invalid email or password.' });
+      const [salt, storedHex] = row.password_hash.split(':');
+      if (!salt || !storedHex)
+        return reply.code(401).send({ error: 'Invalid email or password.' });
+      const derived = scryptSync(password, salt, 64);
+      const expectedBuf = Buffer.from(storedHex, 'hex');
+      if (derived.length !== expectedBuf.length || !timingSafeEqual(derived, expectedBuf))
+        return reply.code(401).send({ error: 'Invalid email or password.' });
+
+      return reply
+        .header('Set-Cookie', cookieHeader())
+        .code(200)
+        .send({ ok: true, user: { name: row.name, email: row.email } });
+    });
+
+    app.post('/api/auth/signout', { bodyLimit: 4096 }, async (_request, reply) => {
+      return reply.header('Set-Cookie', cookieHeader(0)).code(204).send();
+    });
+  }
 }

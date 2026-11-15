@@ -163,6 +163,13 @@ export async function initializeDatabase() {
       quiet_hours_enabled boolean NOT NULL DEFAULT true, locale text,
       hour_cycle text NOT NULL DEFAULT 'auto' CHECK (hour_cycle IN ('auto','h12','h23'))
     );
+    CREATE TABLE IF NOT EXISTS ieanod_users (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      name text NOT NULL,
+      email text UNIQUE NOT NULL,
+      password_hash text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
     ALTER TABLE preferences ADD COLUMN IF NOT EXISTS rules text NOT NULL DEFAULT '';
     ALTER TABLE preferences ADD COLUMN IF NOT EXISTS speech_voice text;
     ALTER TABLE preferences ADD COLUMN IF NOT EXISTS speech_reply text NOT NULL DEFAULT 'auto' CHECK (speech_reply IN ('auto','voice','always','never'));

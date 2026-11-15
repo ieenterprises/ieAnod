@@ -12,7 +12,7 @@ function differentiators(local: boolean) {
     {
       icon: MousePointerClick,
       title: 'Gets tasks done',
-      text: 'Nod uses your apps and its own browser to complete tasks.',
+      text: 'ieAnod uses your apps and its own browser to complete tasks.',
     },
     {
       icon: Sparkles,
@@ -22,12 +22,12 @@ function differentiators(local: boolean) {
     {
       icon: LockKeyhole,
       title: `Runs on your ${local ? 'computer' : 'server'}`,
-      text: 'Nod works in a private workspace. Sign in with your AI provider or use your own key.',
+      text: 'ieAnod works in a private workspace. Sign in with your AI provider or use your own key.',
     },
     {
       icon: ShieldCheck,
       title: 'Keeps you in control',
-      text: 'Nod asks you before taking potentially dangerous actions.',
+      text: 'ieAnod asks you before taking potentially dangerous actions.',
     },
   ];
 }
@@ -55,9 +55,9 @@ export function Welcome({
   return (
     <section className="ob-step ob-welcome">
       <div className="ob-welcome-content">
-        <h1 className="ob-welcome-wordmark" aria-label="Nod">
+        <h1 className="ob-welcome-wordmark" aria-label="ieAnod">
           <NodGlyph size={48} mode="bounce" className="ob-welcome-mark" />
-          <span aria-hidden="true">Nod</span>
+          <span aria-hidden="true">ieAnod</span>
         </h1>
         <p className="ob-welcome-copy">An assistant that takes work off your plate.</p>
         <ul className="ob-welcome-points">
