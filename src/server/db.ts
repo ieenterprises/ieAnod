@@ -68,6 +68,7 @@ export async function initializeDatabase() {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS threads_active_owner ON threads(owner_id) WHERE archived_at IS NULL;
     ALTER TABLE threads ADD COLUMN IF NOT EXISTS observer_session_id uuid NOT NULL DEFAULT gen_random_uuid();
+    ALTER TABLE threads ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
     CREATE TABLE IF NOT EXISTS turns (
       id uuid PRIMARY KEY, owner_id text NOT NULL, thread_id uuid NOT NULL REFERENCES threads(id),
       session_id uuid NOT NULL, source text NOT NULL, source_id text, message_id uuid, prompt text NOT NULL,

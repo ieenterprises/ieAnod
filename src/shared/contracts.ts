@@ -276,6 +276,15 @@ export interface MessageHistoryPage {
   messages: Message[];
   hasMore: boolean;
 }
+export interface ChatThreadSummary {
+  id: string;
+  title: string;
+  preview: string;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+  active: boolean;
+}
 export interface CurrentBrowser {
   threadId: string;
   title: string;

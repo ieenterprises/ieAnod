@@ -20,6 +20,7 @@ export function useAppState(accountId?: string) {
   const refreshAfterRequest = useRef(false);
   const advanceThread = useCallback((next: string) => {
     if (next === threadId.current) return;
+    retiredThreads.current.delete(next);
     if (threadId.current) {
       retiredThreads.current.add(threadId.current);
       const [oldest] = retiredThreads.current;
@@ -54,7 +55,6 @@ export function useAppState(accountId?: string) {
       const next = await api<AppState>('/api/state', { signal: controller.signal });
       if (!active.current || controller.signal.aborted || version !== requestVersion.current)
         return;
-      if (retiredThreads.current.has(next.threadId)) return;
       advanceThread(next.threadId);
       dispatchStream({
         type: 'persisted',

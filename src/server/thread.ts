@@ -929,6 +929,114 @@ export async function resetThread(expectedThreadId: string, analytics?: CaptureA
   };
 }
 
+export async function listThreads(database: Pool | PoolClient = pool, owner = ownerId) {
+  const active = await activeThread(database, owner);
+  const { rows } = await database.query<{
+    id: string;
+    title: string | null;
+    preview: string | null;
+    messageCount: number;
+    createdAt: Date;
+    updatedAt: Date;
+    active: boolean;
+  }>(
+    `SELECT th.id,
+       (SELECT left(COALESCE(m.display_text, m.audio_caption, m.text), 120)
+          FROM messages m
+         WHERE m.owner_id = th.owner_id AND m.thread_id = th.id AND m.role = 'user' AND m.hidden_at IS NULL AND btrim(COALESCE(m.display_text, m.audio_caption, m.text)) <> ''
+         ORDER BY m.created_at ASC, m.id ASC LIMIT 1) AS title,
+       (SELECT left(COALESCE(m.display_text, m.audio_caption, m.text), 160)
+          FROM messages m
+         WHERE m.owner_id = th.owner_id AND m.thread_id = th.id AND m.hidden_at IS NULL AND btrim(COALESCE(m.display_text, m.audio_caption, m.text)) <> ''
+         ORDER BY m.created_at DESC, m.id DESC LIMIT 1) AS preview,
+       (SELECT count(*)::int FROM messages m WHERE m.owner_id = th.owner_id AND m.thread_id = th.id AND m.hidden_at IS NULL) AS "messageCount",
+       th.created_at AS "createdAt",
+       COALESCE(
+         (SELECT max(m.created_at) FROM messages m WHERE m.owner_id = th.owner_id AND m.thread_id = th.id AND m.hidden_at IS NULL),
+         th.updated_at,
+         th.created_at
+       ) AS "updatedAt",
+       th.archived_at IS NULL AS active
+     FROM threads th
+     WHERE th.owner_id = $1
+       AND th.deleted_at IS NULL
+       AND (th.archived_at IS NULL OR EXISTS (SELECT 1 FROM messages m WHERE m.owner_id = th.owner_id AND m.thread_id = th.id AND m.hidden_at IS NULL))
+     ORDER BY (th.id = $2) DESC, "updatedAt" DESC, th.created_at DESC
+     LIMIT 100`,
+    [owner, active.id],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title?.trim() || 'New chat',
+    preview: row.preview?.trim() || 'No messages yet',
+    messageCount: row.messageCount,
+    createdAt: new Date(row.createdAt).toISOString(),
+    updatedAt: new Date(row.updatedAt).toISOString(),
+    active: row.active,
+  }));
+}
+
+export async function switchThread(targetThreadId: string, analytics?: CaptureAnalytics) {
+  const capture = snapshotAnalytics(analytics);
+  const result = await cancellationTransaction(async (client) => {
+    const current = await lockThread(client);
+    if (current.id === targetThreadId)
+      return {
+        cancelled: { ids: [] as string[], browsers: [] as string[] },
+        previousThreadId: current.id,
+        threadId: current.id,
+      };
+    const found = await client.query<{ id: string }>(
+      'SELECT id FROM threads WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL FOR UPDATE',
+      [targetThreadId, ownerId],
+    );
+    if (!found.rowCount) throw httpError('Chat not found.', 404);
+    const cancelled = await cancelTurns(client, current.id, {}, capture);
+    await client.query('UPDATE threads SET archived_at=now(),updated_at=now() WHERE id=$1', [
+      current.id,
+    ]);
+    await client.query('UPDATE threads SET archived_at=NULL,updated_at=now() WHERE id=$1', [
+      targetThreadId,
+    ]);
+    return { cancelled, previousThreadId: current.id, threadId: targetThreadId };
+  }, pool);
+  abortTurns(result.cancelled.ids);
+  refresh();
+  return {
+    ok: true,
+    threadId: result.threadId,
+    previousThreadId: result.previousThreadId,
+    browsers: result.cancelled.browsers,
+  };
+}
+
+export async function deleteThread(targetThreadId: string, analytics?: CaptureAnalytics) {
+  const capture = snapshotAnalytics(analytics);
+  const result = await cancellationTransaction(async (client) => {
+    const current = await lockThread(client);
+    const found = await client.query<{ id: string }>(
+      'SELECT id FROM threads WHERE id=$1 AND owner_id=$2 AND deleted_at IS NULL FOR UPDATE',
+      [targetThreadId, ownerId],
+    );
+    if (!found.rowCount) throw httpError('Chat not found.', 404);
+    const cancelled = await cancelTurns(client, targetThreadId, {}, capture);
+    await client.query(
+      'UPDATE threads SET archived_at=COALESCE(archived_at,now()),deleted_at=now(),updated_at=now() WHERE id=$1',
+      [targetThreadId],
+    );
+    const nextThread = current.id === targetThreadId ? await activeThread(client) : current;
+    return { cancelled, deletedThreadId: targetThreadId, threadId: nextThread.id };
+  }, pool);
+  abortTurns(result.cancelled.ids);
+  refresh();
+  return {
+    ok: true,
+    threadId: result.threadId,
+    deletedThreadId: result.deletedThreadId,
+    browsers: result.cancelled.browsers,
+  };
+}
+
 export async function reactToAssistantMessage(
   messageId: string,
   reaction: MessageReaction | null,

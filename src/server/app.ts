@@ -31,6 +31,8 @@ import { artifactView, localArtifacts, type ArtifactService } from './artifacts.
 import {
   activeHandoffSql,
   activeThread,
+  deleteThread,
+  listThreads,
   ownerStarted,
   pendingAnswerChoicesSql,
   reactToAssistantMessage,
@@ -39,6 +41,7 @@ import {
   stopSignal,
   stopThread,
   submitUserMessage,
+  switchThread,
 } from './thread.ts';
 import { isMessageReaction } from '../shared/emoji.ts';
 import { accessKey, registerLocalAccess } from './access.ts';
@@ -514,6 +517,43 @@ export async function createApp(dependencies: AppDependencies = {}) {
         void dependencies.computer?.discard(id).catch(() => {});
       return reset;
     }, threadId);
+  });
+  app.get('/api/threads', async () => ({
+    threads: await listThreads(pool),
+  }));
+  app.post('/api/threads/new', async () => {
+    const capture = snapshotAnalytics(dependencies.analytics);
+    const active = await activeThread(pool);
+    return audioMessages.pause(async () => {
+      const { previousThreadId, browsers, ...reset } = await resetThread(active.id, capture);
+      for (const id of [previousThreadId, ...browsers])
+        void dependencies.computer?.discard(id).catch(() => {});
+      return reset;
+    }, active.id);
+  });
+  app.post<{ Params: { id: string } }>('/api/threads/:id/switch', async (request) => {
+    const capture = snapshotAnalytics(dependencies.analytics);
+    const targetId = z.uuid().parse(request.params.id);
+    const active = await activeThread(pool);
+    return audioMessages.pause(async () => {
+      const { previousThreadId, browsers, ...switched } = await switchThread(targetId, capture);
+      for (const id of [
+        ...(previousThreadId !== switched.threadId ? [previousThreadId] : []),
+        ...browsers,
+      ])
+        void dependencies.computer?.discard(id).catch(() => {});
+      return switched;
+    }, active.id);
+  });
+  app.delete<{ Params: { id: string } }>('/api/threads/:id', async (request) => {
+    const capture = snapshotAnalytics(dependencies.analytics);
+    const targetId = z.uuid().parse(request.params.id);
+    return audioMessages.pause(async () => {
+      const { deletedThreadId, browsers, ...deleted } = await deleteThread(targetId, capture);
+      for (const id of [deletedThreadId, ...browsers])
+        void dependencies.computer?.discard(id).catch(() => {});
+      return deleted;
+    }, targetId);
   });
   app.post('/api/messages', textMessageOptions, async (request) => {
     const arrival = stopSignal();

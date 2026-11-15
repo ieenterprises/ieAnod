@@ -2051,7 +2051,7 @@ export function Chat({
   }
   const chatActions = (
     <>
-      <ChatTools files={files} tasks={state.tasks} />
+      <ChatTools files={files} tasks={state.tasks} onThreadChanged={refresh} />
       {onFeedback && (
         <FeedbackLauncher
           onFeedback={onFeedback}

@@ -32,8 +32,7 @@ export function configuration(overrides: Partial<Configuration> = {}): Configura
     llmReady: false,
     modelReconnect: false,
     integrationsReady: false,
-    conversationResetEnabled:
-      runtimeEnvironment === 'development' && process.env.NODE_ENV !== 'production',
+    conversationResetEnabled: true,
     ...overrides,
   };
 }

@@ -2,8 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import { visit } from 'unist-util-visit';
-import type { Message, Task } from '../../shared/contracts';
-import { api, errorMessage, requestAccountVersion } from '../lib/api';
+import type { ChatThreadSummary, Message, Task } from '../../shared/contracts';
+import { api, errorMessage, post, requestAccountVersion } from '../lib/api';
 import { analyticsForCurrentSession } from '../lib/analytics';
 import { desktopSettingsAvailable } from '../lib/desktop';
 import {
@@ -17,8 +17,8 @@ import { formatDateTime, useDateFormat } from '../lib/date-format';
 import { useArtifactDrawer } from './artifact-context';
 import { ownedArtifactUrl, type ImagePreview } from './attachment-images';
 import { reuseFile } from './file-actions';
-import { Button, Dialog, DialogContent, DialogTitle, SearchField, Skeleton } from './ui';
-import { ArrowUpRight, Search } from './icons';
+import { Button, Dialog, DialogContent, DialogTitle, Notice, SearchField, Skeleton } from './ui';
+import { ArrowUpRight, Clock, MessageSquarePlus, Plus, Search, Trash2 } from './icons';
 
 const markdown = unified().use(remarkParse);
 
@@ -42,7 +42,15 @@ function highlighted(text: string, query: string) {
     .map((part, index) => (index % 2 ? <mark key={index}>{part}</mark> : part));
 }
 
-export function ChatTools({ files, tasks = [] }: { files: ImagePreview[]; tasks?: Task[] }) {
+export function ChatTools({
+  files,
+  tasks = [],
+  onThreadChanged,
+}: {
+  files: ImagePreview[];
+  tasks?: Task[];
+  onThreadChanged?(): Promise<void> | void;
+}) {
   const drawer = useArtifactDrawer();
   const desktop = desktopSettingsAvailable();
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -50,6 +58,74 @@ export function ChatTools({ files, tasks = [] }: { files: ImagePreview[]; tasks?
   const input = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<'find' | 'commands'>('find');
   const [opened, setOpened] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyItems, setHistoryItems] = useState<ChatThreadSummary[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [busyThreadId, setBusyThreadId] = useState<string | null>(null);
+  const [creatingNew, setCreatingNew] = useState(false);
+
+  async function loadThreads() {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const response = await api<{ threads: ChatThreadSummary[] }>('/api/threads');
+      setHistoryItems(response.threads);
+    } catch (cause) {
+      setHistoryError(errorMessage(cause));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (historyOpen) void loadThreads();
+  }, [historyOpen]);
+
+  async function startNewChat() {
+    if (creatingNew) return;
+    setCreatingNew(true);
+    setHistoryError('');
+    try {
+      await post('/api/threads/new', {});
+      await onThreadChanged?.();
+      setHistoryOpen(false);
+    } catch (cause) {
+      setHistoryError(errorMessage(cause));
+    } finally {
+      setCreatingNew(false);
+    }
+  }
+
+  async function selectThread(threadId: string) {
+    if (busyThreadId) return;
+    setBusyThreadId(threadId);
+    setHistoryError('');
+    try {
+      await post(`/api/threads/${threadId}/switch`, {});
+      await onThreadChanged?.();
+      setHistoryOpen(false);
+    } catch (cause) {
+      setHistoryError(errorMessage(cause));
+    } finally {
+      setBusyThreadId(null);
+    }
+  }
+
+  async function removeThread(threadId: string) {
+    if (busyThreadId) return;
+    setBusyThreadId(threadId);
+    setHistoryError('');
+    try {
+      await api(`/api/threads/${threadId}`, { method: 'DELETE' });
+      await onThreadChanged?.();
+      await loadThreads();
+    } catch (cause) {
+      setHistoryError(errorMessage(cause));
+    } finally {
+      setBusyThreadId(null);
+    }
+  }
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState<{
     query: string;
@@ -220,6 +296,25 @@ export function ChatTools({ files, tasks = [] }: { files: ImagePreview[]; tasks?
         <Button
           variant="ghost"
           size="icon"
+          aria-label="New chat"
+          title="New chat"
+          disabled={creatingNew}
+          onClick={() => void startNewChat()}
+        >
+          <MessageSquarePlus size={16} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Chat history"
+          title="Chat history"
+          onClick={() => setHistoryOpen(true)}
+        >
+          <Clock size={16} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           aria-label="Search chat"
           title="Search chat"
           shortcut={desktop ? shortcutLabel('f', mac) : undefined}
@@ -229,6 +324,81 @@ export function ChatTools({ files, tasks = [] }: { files: ImagePreview[]; tasks?
           <Search size={16} />
         </Button>
       </span>
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent
+          className="chat-search-dialog"
+          aria-describedby={undefined}
+          data-analytics-private
+        >
+          <div className="chat-history-header">
+            <DialogTitle>Chat history</DialogTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={creatingNew}
+              onClick={() => void startNewChat()}
+            >
+              <Plus size={14} />
+              New chat
+            </Button>
+          </div>
+          {historyError && <Notice kind="error">{historyError}</Notice>}
+          <div className="chat-tool-results" aria-busy={historyLoading}>
+            {historyLoading && !historyItems.length ? (
+              <div className="chat-search-loading" role="status" aria-label="Loading chat history">
+                {[0, 1, 2].map((item) => (
+                  <div className="chat-search-skeleton" key={item} aria-hidden="true">
+                    <Skeleton style={{ width: '40%' }} />
+                    <Skeleton style={{ width: '85%' }} />
+                  </div>
+                ))}
+              </div>
+            ) : !historyItems.length ? (
+              <div className="chat-search-state">
+                <strong>No chat history yet</strong>
+                <p>Start a conversation to see your chats here.</p>
+              </div>
+            ) : (
+              <div className="chat-history-list" role="list" aria-label="Conversations">
+                {historyItems.map((thread) => (
+                  <div
+                    key={thread.id}
+                    role="listitem"
+                    className={`chat-history-row${thread.active ? ' is-active' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="chat-history-select"
+                      disabled={busyThreadId === thread.id}
+                      onClick={() => void selectThread(thread.id)}
+                    >
+                      <span className="chat-search-meta">
+                        <strong>{thread.title}</strong>
+                        {thread.active && <span className="chat-history-badge">Current</span>}
+                        <time dateTime={thread.updatedAt}>
+                          {formatDateTime(thread.updatedAt, dateFormat)}
+                        </time>
+                      </span>
+                      <span className="chat-search-excerpt">{thread.preview}</span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="chat-history-delete"
+                      aria-label={`Delete ${thread.title}`}
+                      title="Delete chat"
+                      disabled={busyThreadId === thread.id}
+                      onClick={() => void removeThread(thread.id)}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={opened} onOpenChange={setOpened}>
         <DialogContent
           className="chat-search-dialog"
@@ -334,7 +504,7 @@ export function ChatTools({ files, tasks = [] }: { files: ImagePreview[]; tasks?
                     {message ? (
                       <>
                         <span className="chat-search-meta">
-                          <strong>{message.role === 'user' ? 'You' : 'Nod'}</strong>
+                          <strong>{message.role === 'user' ? 'You' : 'ieAnod'}</strong>
                           <time dateTime={message.createdAt}>
                             {formatDateTime(message.createdAt, dateFormat)}
                           </time>
